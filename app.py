@@ -249,7 +249,6 @@ if vista_actual == "📋 Formulario Tiendas":
                 "¿Dónde se encuentra el equipo? *",
                 options=list(MAPEO_EQUIPOS.keys())
             )
-            )
 
             caja_extra = ""
             if ubicacion == "Caja Adicional (Caja 3 / 4 / 5)":
