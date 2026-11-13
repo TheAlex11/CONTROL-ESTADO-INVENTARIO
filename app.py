@@ -236,16 +236,18 @@ if vista_actual == "📋 Formulario Tiendas":
         }
 
         with st.container(border=True):
-            st.subheader("1. Identificación de la Tienda")
+            st.subheader("1. Tienda Con Novedad")
             tienda_label = st.selectbox(
                 "Seleccione la Tienda / Oficina *",
                 options=["-- Seleccione su tienda --"] + list(opciones_tiendas.keys())
             )
 
-            st.subheader("2. Ubicación y Equipo")
+            st.subheader("2. Ubicación del equipo")
             ubicacion = st.selectbox(
+            st.subheader("2. Equipo Afectado")
                 "¿Dónde se encuentra el equipo? *",
                 options=list(MAPEO_EQUIPOS.keys())
+            )
             )
 
             caja_extra = ""
