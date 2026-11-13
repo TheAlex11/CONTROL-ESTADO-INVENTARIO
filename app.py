@@ -244,8 +244,6 @@ if vista_actual == "📋 Formulario Tiendas":
 
             st.subheader("2. Ubicación del equipo")
             ubicacion = st.selectbox(
-            st.subheader("2. Equipo Afectado")
-                ubicacion = st.selectbox(
                 "¿Dónde se encuentra el equipo? *",
                 options=list(MAPEO_EQUIPOS.keys())
             )
