@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 import sqlite3
 from io import BytesIO
-
+ADMIN_PASSWORD = "TuClaveAqui2026"
 # ==============================================================================
 # CONFIGURACIÓN GENERAL Y SEGURIDAD
 # ==============================================================================
