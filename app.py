@@ -18,7 +18,7 @@ st.set_page_config(
 EXCEL_PATH = "ESTADO_TIENDAS 2026.xlsx"
 SHEET_NAME = "Control de Equipos"
 DB_PATH = "historial_reportes.db"
-ADMIN_PASSWORD = "TuClaveAqui2026"  # <-- Cambia esta clave por la contraseña que desees
+ADMIN_PASSWORD = "Rivier@25"  # <-- Cambia esta clave por la contraseña que desees
 
 # ==============================================================================
 # MAPEO EXACTO DE COLUMNAS DEL EXCEL (ESTADO_TIENDAS 2026.xlsx)
