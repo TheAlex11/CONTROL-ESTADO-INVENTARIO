@@ -4,8 +4,7 @@ import openpyxl
 from datetime import datetime
 import os
 import sqlite3
-from io import BytesIO
-ADMIN_PASSWORD = "TuClaveAqui2026"
+
 # ==============================================================================
 # CONFIGURACIÓN GENERAL Y SEGURIDAD
 # ==============================================================================
@@ -19,15 +18,11 @@ st.set_page_config(
 EXCEL_PATH = "ESTADO_TIENDAS 2026.xlsx"
 SHEET_NAME = "Control de Equipos"
 DB_PATH = "historial_reportes.db"
-ADMIN_PASSWORD = os.getenv("TI_ADMIN_PASS", "Tecnologia2026*")  # Cambia esta clave a tu gusto
+ADMIN_PASSWORD = "TuClaveAqui2026"  # <-- Cambia esta clave por la contraseña que desees
 
 # ==============================================================================
 # MAPEO EXACTO DE COLUMNAS DEL EXCEL (ESTADO_TIENDAS 2026.xlsx)
 # ==============================================================================
-# Estructura:
-# "Ubicación": {
-#     "Nombre Equipo": {"activo_col": "Letra o None", "estado_col": "Letra o None"}
-# }
 MAPEO_EQUIPOS = {
     "POS I (Caja 1)": {
         "Computador": {"activo_col": "D", "estado_col": "E"},
