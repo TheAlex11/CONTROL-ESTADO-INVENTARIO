@@ -374,13 +374,15 @@ with st.sidebar:
     st.markdown("### 🔐 Acceso Tecnología")
     st.caption("Área restringida para auditoría, gestión de casos y descarga de Excel.")
     if not st.session_state.admin_autenticado:
-        pwd = st.text_input("Contraseña de Administrador", type="password", key="pwd_input")
-        if st.button("Ingresar a Panel TI", use_container_width=True, type="primary"):
-            if pwd == ADMIN_PASSWORD:
-                st.session_state.admin_autenticado = True
-                st.rerun()
-            else:
-                st.error("Contraseña incorrecta.")
+        with st.form("form_login_ti", border=False):
+            pwd = st.text_input("Contraseña de Administrador", type="password", key="pwd_input")
+            submit_login = st.form_submit_button("Ingresar a Panel TI", use_container_width=True, type="primary")
+            if submit_login:
+                if pwd == ADMIN_PASSWORD:
+                    st.session_state.admin_autenticado = True
+                    st.rerun()
+                else:
+                    st.error("Contraseña incorrecta.")
     else:
         st.success("Sesión activa: Tecnología")
         vista_seleccionada = st.radio(
