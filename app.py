@@ -20,6 +20,23 @@ SHEET_NAME = "Control de Equipos"
 DB_PATH = "historial_reportes.db"
 ADMIN_PASSWORD = "Rivier@25"  # <-- Cambia esta clave por la contraseña que desees
 
+ESTADOS_GESTION_TI = [
+    "🔴 Pendiente / Abierto",
+    "🟡 En Revisión / Diagnóstico",
+    "🟠 Pendiente de Repuesto / Compra",
+    "🔵 Pendiente de Cambio / Envío de Equipo",
+    "🟢 Solucionado / Operativo"
+]
+
+# Periféricos que NO manejan placa de Activo Fijo
+PERIFERICOS_SIN_ACTIVO = {
+    "Teclado",
+    "Mouse",
+    "Pantalla",
+    "Cables (Poder/Vid/Red)",
+    "PadMouse"
+}
+
 # ==============================================================================
 # MAPEO EXACTO DE COLUMNAS DEL EXCEL (ESTADO_TIENDAS 2026.xlsx)
 # ==============================================================================
@@ -67,7 +84,7 @@ MAPEO_EQUIPOS = {
 }
 
 # ==============================================================================
-# BASE DE DATOS DE AUDITORÍA (SQLITE)
+# BASE DE DATOS DE AUDITORÍA Y GESTIÓN TI (SQLITE)
 # ==============================================================================
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -76,6 +93,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS reportes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fecha_hora TEXT,
+            fila_excel INTEGER,
             c_costos TEXT,
             tienda TEXT,
             ciudad TEXT,
@@ -86,24 +104,40 @@ def init_db():
             activo_fijo TEXT,
             observacion TEXT,
             reportado_por TEXT,
-            revisado_ti INTEGER DEFAULT 0
+            estado_ti TEXT DEFAULT '🔴 Pendiente / Abierto',
+            solucion_ti TEXT DEFAULT '',
+            fecha_cierre_ti TEXT DEFAULT ''
         )
     """)
+    columnas_existentes = [col[1] for col in c.execute("PRAGMA table_info(reportes)").fetchall()]
+    nuevas_cols = {
+        "fila_excel": "INTEGER",
+        "estado_ti": "TEXT DEFAULT '🔴 Pendiente / Abierto'",
+        "solucion_ti": "TEXT DEFAULT ''",
+        "fecha_cierre_ti": "TEXT DEFAULT ''"
+    }
+    for col_name, col_def in nuevas_cols.items():
+        if col_name not in columnas_existentes:
+            c.execute(f"ALTER TABLE reportes ADD COLUMN {col_name} {col_def}")
     conn.commit()
     conn.close()
 
 def guardar_log_db(data):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    estado_inicial_ti = (
+        "🟢 Solucionado / Operativo" if data["estado"] == "BUENO" else "🔴 Pendiente / Abierto"
+    )
     c.execute("""
         INSERT INTO reportes (
-            fecha_hora, c_costos, tienda, ciudad, ubicacion, caja_extra,
-            equipo, estado, activo_fijo, observacion, reportado_por
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            fecha_hora, fila_excel, c_costos, tienda, ciudad, ubicacion, caja_extra,
+            equipo, estado, activo_fijo, observacion, reportado_por, estado_ti
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        data["fecha_hora"], data["c_costos"], data["tienda"], data["ciudad"],
-        data["ubicacion"], data["caja_extra"], data["equipo"], data["estado"],
-        data["activo_fijo"], data["observacion"], data["reportado_por"]
+        data["fecha_hora"], data["fila_excel"], data["c_costos"], data["tienda"],
+        data["ciudad"], data["ubicacion"], data["caja_extra"], data["equipo"],
+        data["estado"], data["activo_fijo"], data["observacion"],
+        data["reportado_por"], estado_inicial_ti
     ))
     conn.commit()
     conn.close()
@@ -132,7 +166,7 @@ def obtener_tiendas_desde_excel():
     wb.close()
     return tiendas
 
-def actualizar_excel_maestro(fila_tienda, ubicacion, caja_extra, equipo, estado, activo_fijo, observacion, reportado_por):
+def actualizar_excel_maestro(fila_tienda, ubicacion, caja_extra, equipo, estado, activo_fijo, observacion, reportado_por, es_cierre_ti=False):
     """Actualiza la celda exacta de Estado, Activo Fijo y Observaciones en el .xlsx"""
     wb = openpyxl.load_workbook(EXCEL_PATH)
     ws = wb[SHEET_NAME]
@@ -145,18 +179,24 @@ def actualizar_excel_maestro(fila_tienda, ubicacion, caja_extra, equipo, estado,
     if estado_col:
         ws[f"{estado_col}{fila_tienda}"] = estado.upper()
 
-    # 2. Actualizar columna de Activo Fijo / Placa si se ingresó y la columna existe
-    if activo_col and activo_fijo:
+    # 2. Actualizar columna de Activo Fijo / Placa solo si aplica y se ingresó
+    if activo_col and activo_fijo and activo_fijo not in ["N/A", "SIN ACTIVO"]:
         ws[f"{activo_col}{fila_tienda}"] = activo_fijo.strip().upper()
 
-    # 3. Registrar novedad en OBSERVACIONES (Columna AT) cuando es REGULAR o MALO, o si hay nota
+    # 3. Registrar novedad o solución TI en OBSERVACIONES (Columna AT)
     fecha_corta = datetime.now().strftime("%d/%m/%Y")
     etiqueta_ubic = caja_extra if caja_extra else ubicacion
-    detalle_placa = f" [Placa: {activo_fijo.upper()}]" if activo_fijo else ""
+    detalle_placa = f" [Placa: {activo_fijo.upper()}]" if (activo_fijo and activo_fijo not in ["N/A", "SIN ACTIVO"]) else ""
     detalle_obs = f" - {observacion.strip()}" if observacion.strip() else ""
 
-    if estado.upper() in ["REGULAR", "MALO"] or observacion.strip():
+    if es_cierre_ti:
+        nueva_nota = f"[{fecha_corta} TI] {etiqueta_ubic} - {equipo} -> {estado.upper()}{detalle_placa}{detalle_obs}"
+    elif estado.upper() in ["REGULAR", "MALO"] or observacion.strip():
         nueva_nota = f"[{fecha_corta}] {etiqueta_ubic} - {equipo} ({estado.upper()}){detalle_placa}{detalle_obs} (Rep: {reportado_por})"
+    else:
+        nueva_nota = ""
+
+    if nueva_nota:
         obs_actual = ws[f"AT{fila_tienda}"].value
         if obs_actual and str(obs_actual).strip():
             ws[f"AT{fila_tienda}"] = f"{str(obs_actual).strip()} | {nueva_nota}"
@@ -182,7 +222,7 @@ if "admin_autenticado" not in st.session_state:
 # ==============================================================================
 with st.sidebar:
     st.markdown("### 🔐 Acceso Tecnología")
-    st.caption("Área restringida para auditoría de base de datos y descarga de Excel.")
+    st.caption("Área restringida para auditoría, gestión de casos y descarga de Excel.")
     if not st.session_state.admin_autenticado:
         pwd = st.text_input("Contraseña de Administrador", type="password", key="pwd_input")
         if st.button("Ingresar a Panel TI", use_container_width=True):
@@ -202,7 +242,6 @@ with st.sidebar:
             st.session_state.admin_autenticado = False
             st.rerun()
 
-# Si no es admin, siempre ve únicamente el formulario de reporte
 if not st.session_state.admin_autenticado:
     vista_actual = "📋 Formulario Tiendas"
 else:
@@ -263,18 +302,23 @@ if vista_actual == "📋 Formulario Tiendas":
                 horizontal=True
             )
 
-            # VALIDACIÓN CONDICIONAL: Solo pide Activo Fijo / Placa si es Regular o Malo
+            # VALIDACIÓN CONDICIONAL:
+            # Solo pide Activo Fijo / Placa si es Regular o Malo Y el equipo maneja activo fijo
+            requiere_activo = (estado in ["Regular", "Malo"]) and (equipo not in PERIFERICOS_SIN_ACTIVO)
             activo_fijo = ""
-            if estado in ["Regular", "Malo"]:
-                st.warning("⚠️ Al reportar un equipo en estado **Regular** o **Malo**, es obligatorio ingresar el número de **Activo Fijo / Placa**.")
+
+            if requiere_activo:
+                st.warning("⚠️ Al reportar este equipo en estado **Regular** o **Malo**, es obligatorio ingresar el número de **Activo Fijo / Placa**.")
                 activo_fijo = st.text_input(
                     "Número de Activo Fijo / Placa *",
                     placeholder="Ej: R05177, A-1702, 7730..."
                 )
+            elif estado in ["Regular", "Malo"] and equipo in PERIFERICOS_SIN_ACTIVO:
+                st.info(f"ℹ️ El periférico **{equipo}** no requiere número de Activo Fijo / Placa. Solo describa la novedad.")
 
             observacion = st.text_area(
                 "Detalle de la novedad o falla" + (" *" if estado in ["Regular", "Malo"] else " (Opcional)"),
-                placeholder="Ej: El clic izquierdo del mouse dejó de funcionar / El equipo de sonido presenta interferencia...",
+                placeholder="Ej: El clic izquierdo del mouse dejó de funcionar / El teclado tiene teclas pegadas...",
                 height=90
             )
 
@@ -290,7 +334,7 @@ if vista_actual == "📋 Formulario Tiendas":
                 errores = []
                 if tienda_label == "-- Seleccione su tienda --":
                     errores.append("Debe seleccionar una Tienda / Oficina.")
-                if estado in ["Regular", "Malo"] and not activo_fijo.strip():
+                if requiere_activo and not activo_fijo.strip():
                     errores.append("Debe ingresar el número de **Activo Fijo / Placa** del equipo.")
                 if estado in ["Regular", "Malo"] and not observacion.strip():
                     errores.append("Debe describir brevemente la falla presentada.")
@@ -303,23 +347,28 @@ if vista_actual == "📋 Formulario Tiendas":
                 else:
                     tienda_info = opciones_tiendas[tienda_label]
                     fecha_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    placa_guardada = (
+                        activo_fijo.strip().upper()
+                        if requiere_activo
+                        else ("SIN ACTIVO" if equipo in PERIFERICOS_SIN_ACTIVO else "N/A")
+                    )
 
                     try:
-                        # 1. Actualizar Excel Oficial
                         actualizar_excel_maestro(
                             fila_tienda=tienda_info["fila"],
                             ubicacion=ubicacion,
                             caja_extra=caja_extra,
                             equipo=equipo,
                             estado=estado,
-                            activo_fijo=activo_fijo,
+                            activo_fijo=placa_guardada,
                             observacion=observacion,
-                            reportado_por=reportado_por
+                            reportado_por=reportado_por,
+                            es_cierre_ti=False
                         )
 
-                        # 2. Guardar en historial de auditoría
                         guardar_log_db({
                             "fecha_hora": fecha_now,
+                            "fila_excel": tienda_info["fila"],
                             "c_costos": tienda_info["c_costos"],
                             "tienda": tienda_info["tienda"],
                             "ciudad": tienda_info["ciudad"],
@@ -327,7 +376,7 @@ if vista_actual == "📋 Formulario Tiendas":
                             "caja_extra": caja_extra,
                             "equipo": equipo,
                             "estado": estado.upper(),
-                            "activo_fijo": activo_fijo.strip().upper() if activo_fijo else "N/A",
+                            "activo_fijo": placa_guardada,
                             "observacion": observacion.strip(),
                             "reportado_por": reportado_por.strip()
                         })
@@ -346,31 +395,133 @@ if vista_actual == "📋 Formulario Tiendas":
 # VISTA 2: PANEL EXCLUSIVO TECNOLOGÍA / ADMINISTRADOR
 # ==============================================================================
 elif vista_actual == "📊 Panel Control Tecnología (Excel)":
-    st.title("📊 Panel de Control y Auditoría — Tecnología")
-    st.caption("Visualización restringida de novedades reportadas y descarga directa del formato maestro actualizado.")
+    st.title("📊 Panel de Control y Atención TI — Tecnología")
+    st.caption("Gestión de requerimientos reportados por tiendas y descarga directa del formato maestro actualizado.")
 
     conn = sqlite3.connect(DB_PATH)
     df_logs = pd.read_sql_query("SELECT * FROM reportes ORDER BY id DESC", conn)
     conn.close()
 
-    # Métricas superiores
     m1, m2, m3, m4 = st.columns(4)
     total_rep = len(df_logs)
-    malos = len(df_logs[df_logs["estado"] == "MALO"]) if not df_logs.empty else 0
-    regulares = len(df_logs[df_logs["estado"] == "REGULAR"]) if not df_logs.empty else 0
-    buenos = len(df_logs[df_logs["estado"] == "BUENO"]) if not df_logs.empty else 0
+    pendientes = len(df_logs[df_logs["estado_ti"] != "🟢 Solucionado / Operativo"]) if not df_logs.empty else 0
+    solucionados = len(df_logs[df_logs["estado_ti"] == "🟢 Solucionado / Operativo"]) if not df_logs.empty else 0
+    malos_activos = len(df_logs[(df_logs["estado"] == "MALO") & (df_logs["estado_ti"] != "🟢 Solucionado / Operativo")]) if not df_logs.empty else 0
 
-    m1.metric("Total Reportes Recibidos", total_rep)
-    m2.metric("🔴 Equipos MALOS", malos)
-    m3.metric("🟡 Equipos REGULARES", regulares)
-    m4.metric("🟢 Reportes BUENOS", buenos)
+    m1.metric("Total Reportes", total_rep)
+    m2.metric("⏳ Casos Abiertos / En Gestión", pendientes)
+    m3.metric("🔴 Equipos MALOS sin resolver", malos_activos)
+    m4.metric("✅ Casos Solucionados", solucionados)
+
+    st.markdown("---")
+
+    # ==========================================================================
+    # MÓDULO DE ATENCIÓN Y SOLUCIÓN DE REQUERIMIENTOS (ADMIN TI)
+    # ==========================================================================
+    if not df_logs.empty:
+        with st.expander("🛠️ Atender / Actualizar Estado de un Requerimiento", expanded=True):
+            opciones_casos = {
+                f"ID #{row['id']} | {row['tienda']} — {row['equipo']} ({row['ubicacion']}) | Estado actual: {row['estado_ti']}": row
+                for _, row in df_logs.iterrows()
+            }
+
+            caso_sel_label = st.selectbox(
+                "Seleccione el requerimiento a gestionar:",
+                options=list(opciones_casos.keys())
+            )
+            caso = opciones_casos[caso_sel_label]
+
+            st.info(
+                f"**Detalle del reporte:** Tienda **{caso['tienda']}** | Equipo: **{caso['equipo']}** | "
+                f"Placa reportada: **{caso['activo_fijo']}** | Reportado por: **{caso['reportado_por']}**\n\n"
+                f"**Falla reportada:** {caso['observacion'] if caso['observacion'] else 'Sin observación'}"
+            )
+
+            col_g1, col_g2 = st.columns(2)
+            with col_g1:
+                idx_actual = ESTADOS_GESTION_TI.index(caso["estado_ti"]) if caso["estado_ti"] in ESTADOS_GESTION_TI else 0
+                nuevo_estado_ti = st.selectbox(
+                    "Nuevo Estado de Gestión TI *",
+                    options=ESTADOS_GESTION_TI,
+                    index=idx_actual
+                )
+
+            nueva_placa = caso["activo_fijo"]
+            actualizar_excel_a_bueno = False
+
+            with col_g2:
+                if nuevo_estado_ti == "🟢 Solucionado / Operativo":
+                    actualizar_excel_a_bueno = st.checkbox(
+                        "Actualizar estado del equipo en el Excel a BUENO",
+                        value=True
+                    )
+                    if caso["equipo"] not in PERIFERICOS_SIN_ACTIVO:
+                        nueva_placa = st.text_input(
+                            "Activo Fijo / Placa final (si se cambió el equipo, ingrese la nueva placa):",
+                            value=caso["activo_fijo"] if caso["activo_fijo"] not in ["N/A", "SIN ACTIVO"] else ""
+                        )
+
+            solucion_ti = st.text_input(
+                "Diagnóstico o Solución aplicada por Tecnología *",
+                value=caso["solucion_ti"] if caso["solucion_ti"] else "",
+                placeholder="Ej: Se envió mouse nuevo / Se reinstaló controlador POS..."
+            )
+
+            if st.button("💾 Guardar Gestión TI y Sincronizar Excel", type="primary"):
+                if not solucion_ti.strip():
+                    st.error("Por favor ingrese el diagnóstico o acción realizada por Tecnología.")
+                else:
+                    try:
+                        fecha_cierre = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        nuevo_estado_equipo = "BUENO" if (nuevo_estado_ti == "🟢 Solucionado / Operativo" and actualizar_excel_a_bueno) else caso["estado"]
+                        placa_final = nueva_placa.strip().upper() if (nueva_placa and nueva_placa.strip()) else caso["activo_fijo"]
+
+                        fila_excel = caso["fila_excel"]
+                        if pd.isna(fila_excel) or not fila_excel:
+                            tiendas_map = {t["tienda"]: t["fila"] for t in obtener_tiendas_desde_excel()}
+                            fila_excel = tiendas_map.get(caso["tienda"])
+
+                        if fila_excel:
+                            nota_excel = f"{nuevo_estado_ti.split(' ', 1)[1]}: {solucion_ti.strip()}"
+                            actualizar_excel_maestro(
+                                fila_tienda=int(fila_excel),
+                                ubicacion=caso["ubicacion"],
+                                caja_extra=caso["caja_extra"] if caso["caja_extra"] else "",
+                                equipo=caso["equipo"],
+                                estado=nuevo_estado_equipo,
+                                activo_fijo=placa_final,
+                                observacion=nota_excel,
+                                reportado_por="Tecnología",
+                                es_cierre_ti=True
+                            )
+
+                        conn = sqlite3.connect(DB_PATH)
+                        c = conn.cursor()
+                        c.execute("""
+                            UPDATE reportes
+                            SET estado_ti = ?, solucion_ti = ?, fecha_cierre_ti = ?,
+                                estado = ?, activo_fijo = ?
+                            WHERE id = ?
+                        """, (
+                            nuevo_estado_ti, solucion_ti.strip(), fecha_cierre,
+                            nuevo_estado_equipo, placa_final, int(caso["id"])
+                        ))
+                        conn.commit()
+                        conn.close()
+
+                        st.success("✅ Gestión guardada y sincronizada con el formato Excel.")
+                        st.rerun()
+                    except PermissionError:
+                        st.error("❌ Cierre el archivo Excel maestro antes de guardar los cambios.")
+                    except Exception as e:
+                        st.error(f"❌ Error al actualizar el caso: {e}")
 
     st.markdown("---")
 
     # Botón de descarga directa del Excel oficial actualizado
     col_dl1, col_dl2 = st.columns([2, 1])
     with col_dl1:
-        st.subheader("Historial de Actualizaciones Recibidas")
+        st.subheader("Historial de Requerimientos y Seguimiento TI")
     with col_dl2:
         if os.path.exists(EXCEL_PATH):
             with open(EXCEL_PATH, "rb") as f:
@@ -387,16 +538,15 @@ elif vista_actual == "📊 Panel Control Tecnología (Excel)":
     if df_logs.empty:
         st.info("Aún no se han recibido reportes desde el portal de tiendas.")
     else:
-        # Filtros para Tecnología
         f1, f2, f3 = st.columns(3)
         with f1:
-            filtro_estado = st.multiselect("Filtrar por Estado", ["MALO", "REGULAR", "BUENO"], default=["MALO", "REGULAR", "BUENO"])
+            filtro_gestion = st.multiselect("Filtrar por Gestión TI", ESTADOS_GESTION_TI, default=ESTADOS_GESTION_TI)
         with f2:
             filtro_tienda = st.multiselect("Filtrar por Tienda", sorted(df_logs["tienda"].unique()))
         with f3:
             buscar_placa = st.text_input("Buscar por Activo Fijo / Placa", placeholder="Ej: R05177")
 
-        df_filtrado = df_logs[df_logs["estado"].isin(filtro_estado)]
+        df_filtrado = df_logs[df_logs["estado_ti"].isin(filtro_gestion)]
         if filtro_tienda:
             df_filtrado = df_filtrado[df_filtrado["tienda"].isin(filtro_tienda)]
         if buscar_placa.strip():
@@ -404,9 +554,9 @@ elif vista_actual == "📊 Panel Control Tecnología (Excel)":
 
         st.dataframe(
             df_filtrado[[
-                "id", "fecha_hora", "c_costos", "tienda", "ciudad",
-                "ubicacion", "caja_extra", "equipo", "estado", "activo_fijo",
-                "observacion", "reportado_por"
+                "id", "fecha_hora", "tienda", "ubicacion", "caja_extra",
+                "equipo", "estado", "activo_fijo", "observacion",
+                "estado_ti", "solucion_ti", "fecha_cierre_ti", "reportado_por"
             ]],
             use_container_width=True,
             hide_index=True
