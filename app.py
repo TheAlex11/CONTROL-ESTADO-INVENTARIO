@@ -4,13 +4,17 @@ import openpyxl
 from datetime import datetime
 import os
 import sqlite3
+import base64
 
 # ==============================================================================
 # CONFIGURACIÓN GENERAL Y SEGURIDAD
 # ==============================================================================
+LOGO_PATH = "logo_lariviera.png"
+CSS_PATH = "styles.css"
+
 st.set_page_config(
-    page_title="Control de Estado de Activos | Tecnología",
-    page_icon="🖥️",
+    page_title="Control de Estado de Activos | La Riviera",
+    page_icon=LOGO_PATH if os.path.exists(LOGO_PATH) else "🖥️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -18,7 +22,7 @@ st.set_page_config(
 EXCEL_PATH = "ESTADO_TIENDAS 2026.xlsx"
 SHEET_NAME = "Control de Equipos"
 DB_PATH = "historial_reportes.db"
-ADMIN_PASSWORD = "Rivier@25"  
+ADMIN_PASSWORD = "Rivier@25"
 
 ESTADOS_GESTION_TI = [
     "🔴 Pendiente / Abierto",
@@ -35,6 +39,34 @@ PERIFERICOS_SIN_ACTIVO = {
     "Cables (Poder/Vid/Red)",
     "PadMouse"
 }
+
+# ==============================================================================
+# CARGA DE ESTILOS EXTERNOS (styles.css) Y ENCABEZADO CORPORATIVO
+# ==============================================================================
+def cargar_estilos_css(ruta_css):
+    if os.path.exists(ruta_css):
+        with open(ruta_css, "r", encoding="utf-8") as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+def renderizar_banner_corporativo(titulo, subtitulo, etiqueta="ÁREA DE TECNOLOGÍA"):
+    logo_html = ""
+    if os.path.exists(LOGO_PATH):
+        with open(LOGO_PATH, "rb") as img_file:
+            b64_logo = base64.b64encode(img_file.read()).decode()
+        logo_html = f'<img src="data:image/png;base64,{b64_logo}" style="height: 58px; margin-right: 18px; object-fit: contain;" />'
+
+    st.markdown(f"""
+        <div class="riviera-header">
+            <div style="display: flex; align-items: center;">
+                {logo_html}
+                <div>
+                    <p class="riviera-header-title">{titulo}</p>
+                    <p class="riviera-header-sub">{subtitulo}</p>
+                </div>
+            </div>
+            <div class="riviera-badge">{etiqueta}</div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # ==============================================================================
 # MAPEO EXACTO DE COLUMNAS DEL EXCEL (ESTADO_TIENDAS 2026.xlsx)
@@ -215,7 +247,6 @@ def renderizar_tarjetas_casos(df_subset, tab_key):
         ubic_txt = f"{caso['ubicacion']} ({caso['caja_extra']})" if caso["caja_extra"] else caso["ubicacion"]
 
         with st.container(border=True):
-            # Encabezado del caso
             c_head1, c_head2 = st.columns([3, 1])
             with c_head1:
                 st.markdown(f"#### #{cid} · {caso['tienda']} ({caso['ciudad']})")
@@ -230,7 +261,6 @@ def renderizar_tarjetas_casos(df_subset, tab_key):
             if caso["observacion"]:
                 st.markdown(f"> **Novedad reportada:** {caso['observacion']}")
 
-            # Controles inline para atender y cambiar el estado directamente en la tarjeta
             c_act1, c_act2, c_act3 = st.columns([1.4, 2, 1])
             with c_act1:
                 idx_actual = ESTADOS_GESTION_TI.index(caso["estado_ti"]) if caso["estado_ti"] in ESTADOS_GESTION_TI else 0
@@ -251,7 +281,6 @@ def renderizar_tarjetas_casos(df_subset, tab_key):
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 guardar_btn = st.button("💾 Actualizar", key=f"btn_{tab_key}_{cid}", type="primary", use_container_width=True)
 
-            # Opciones extra si se marca como Solucionado
             actualizar_excel_a_bueno = True
             nueva_placa = caso["activo_fijo"]
             if nuevo_estado_ti == "🟢 Solucionado / Operativo":
@@ -331,6 +360,7 @@ def renderizar_tarjetas_casos(df_subset, tab_key):
 # INICIALIZACIÓN
 # ==============================================================================
 init_db()
+cargar_estilos_css(CSS_PATH)
 
 if "admin_autenticado" not in st.session_state:
     st.session_state.admin_autenticado = False
@@ -339,11 +369,13 @@ if "admin_autenticado" not in st.session_state:
 # BARRA LATERAL: ACCESO EXCLUSIVO TECNOLOGÍA / ADMIN
 # ==============================================================================
 with st.sidebar:
+    if os.path.exists(LOGO_PATH):
+        st.image(LOGO_PATH, use_container_width=True)
     st.markdown("### 🔐 Acceso Tecnología")
     st.caption("Área restringida para auditoría, gestión de casos y descarga de Excel.")
     if not st.session_state.admin_autenticado:
         pwd = st.text_input("Contraseña de Administrador", type="password", key="pwd_input")
-        if st.button("Ingresar a Panel TI", use_container_width=True):
+        if st.button("Ingresar a Panel TI", use_container_width=True, type="primary"):
             if pwd == ADMIN_PASSWORD:
                 st.session_state.admin_autenticado = True
                 st.rerun()
@@ -369,13 +401,13 @@ else:
 # VISTA 1: PORTAL DE REPORTE PARA TIENDAS (SIN VISIBILIDAD DE INVENTARIO)
 # ==============================================================================
 if vista_actual == "📋 Formulario Tiendas":
-    col_izq, col_centro, col_der = st.columns([1, 2.2, 1])
+    col_izq, col_centro, col_der = st.columns([0.8, 2.4, 0.8])
 
     with col_centro:
-        st.markdown("## 🖥️ Control de Estado de Activos")
-        st.markdown(
-            "Reporte novedades o cambios en el estado operativo de los equipos tecnológicos de su tienda. "
-            "La información se envía directamente al área de **Tecnología**."
+        renderizar_banner_corporativo(
+            titulo="Control de Estado de Activos",
+            subtitulo="Reporte novedades o cambios en el estado operativo de los equipos tecnológicos de su tienda.",
+            etiqueta="PORTAL TIENDAS · LA RIVIERA"
         )
 
         tiendas = obtener_tiendas_desde_excel()
@@ -507,16 +539,23 @@ if vista_actual == "📋 Formulario Tiendas":
                     except Exception as e:
                         st.error(f"❌ Ocurrió un error al guardar el reporte: {e}")
 
+        st.markdown(
+            '<div class="riviera-footer">La Riviera · Sistema de Gestión Administrativa · Área de Tecnología</div>',
+            unsafe_allow_html=True
+        )
+
 # ==============================================================================
 # VISTA 2: PANEL EXCLUSIVO TECNOLOGÍA / ADMINISTRADOR (BANDEJA POR ESTADOS)
 # ==============================================================================
 elif vista_actual == "📊 Panel Control Tecnología (Excel)":
-    col_t1, col_t2 = st.columns([2, 1])
-    with col_t1:
-        st.title("📊 Bandeja de Gestión TI — Tecnología")
-        st.caption("Filtre los requerimientos por estado de atención, actualice diagnósticos y descargue el Excel maestro.")
-    with col_t2:
-        st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+    renderizar_banner_corporativo(
+        titulo="Bandeja de Gestión y Control de Activos",
+        subtitulo="Atención de novedades reportadas por tiendas, seguimiento técnico y sincronización con Excel.",
+        etiqueta="PANEL EXCLUSIVO TECNOLOGÍA"
+    )
+
+    col_dl1, col_dl2 = st.columns([2.2, 1])
+    with col_dl2:
         if os.path.exists(EXCEL_PATH):
             with open(EXCEL_PATH, "rb") as f:
                 excel_bytes = f.read()
@@ -537,7 +576,6 @@ elif vista_actual == "📊 Panel Control Tecnología (Excel)":
         st.info("Aún no se han recibido reportes desde el portal de tiendas.")
         st.stop()
 
-    # Barra de filtros rápidos por Tienda y Placa que aplica a todas las pestañas
     f1, f2 = st.columns([1.5, 1])
     with f1:
         filtro_tienda = st.multiselect("🏪 Filtrar por Tienda", sorted(df_logs["tienda"].unique()), placeholder="Todas las tiendas")
@@ -550,7 +588,6 @@ elif vista_actual == "📊 Panel Control Tecnología (Excel)":
     if buscar_placa.strip():
         df_base = df_base[df_base["activo_fijo"].str.contains(buscar_placa.strip(), case=False, na=False)]
 
-    # Conteos por cada estado de gestión TI
     df_abiertos = df_base[df_base["estado_ti"] == "🔴 Pendiente / Abierto"]
     df_revision = df_base[df_base["estado_ti"] == "🟡 En Revisión / Diagnóstico"]
     df_repuesto = df_base[df_base["estado_ti"] == "🟠 Pendiente de Repuesto / Compra"]
@@ -558,7 +595,6 @@ elif vista_actual == "📊 Panel Control Tecnología (Excel)":
     df_solucionados = df_base[df_base["estado_ti"] == "🟢 Solucionado / Operativo"]
     df_todos_activos = df_base[df_base["estado_ti"] != "🟢 Solucionado / Operativo"]
 
-    # Pestañas filtradas por estado
     tab_activos, tab_pend, tab_rev, tab_rep, tab_cam, tab_sol = st.tabs([
         f"⏳ Todos sin resolver ({len(df_todos_activos)})",
         f"🔴 Pendientes ({len(df_abiertos)})",
@@ -597,3 +633,8 @@ elif vista_actual == "📊 Panel Control Tecnología (Excel)":
                 use_container_width=True,
                 hide_index=True
             )
+
+    st.markdown(
+        '<div class="riviera-footer">La Riviera · Sistema de Gestión Administrativa · Área de Tecnología</div>',
+        unsafe_allow_html=True
+    )
