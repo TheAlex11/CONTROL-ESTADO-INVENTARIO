@@ -1,0 +1,97 @@
+/* Fondo general y tipografía limpia */
+.stApp {
+    background-color: #F6F8F7;
+    color: #1E293B;
+}
+
+/* Contenedores tipo tarjeta corporativa */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #FFFFFF;
+    border: 1px solid #DCE7E0;
+    border-top: 4px solid #006837;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 104, 55, 0.06);
+    padding: 0.75rem;
+}
+
+/* Encabezados de sección dentro del formulario */
+h2, h3 {
+    color: #006837 !important;
+    font-weight: 700 !important;
+}
+
+/* Botones primarios en verde institucional La Riviera */
+button[kind="primary"] {
+    background-color: #006837 !important;
+    border-color: #006837 !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease;
+}
+
+button[kind="primary"]:hover {
+    background-color: #004D29 !important;
+    border-color: #004D29 !important;
+    box-shadow: 0 4px 12px rgba(0, 104, 55, 0.25);
+}
+
+/* Pestañas (Tabs) en Panel TI */
+button[data-baseweb="tab"] {
+    font-weight: 600 !important;
+    color: #334155 !important;
+}
+
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #006837 !important;
+    border-bottom-color: #006837 !important;
+}
+
+/* Banner superior corporativo */
+.riviera-header {
+    background-color: #FFFFFF;
+    border: 1px solid #DCE7E0;
+    border-bottom: 4px solid #006837;
+    border-radius: 12px;
+    padding: 18px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 10px rgba(0, 104, 55, 0.05);
+}
+
+.riviera-header-title {
+    margin: 0;
+    color: #006837;
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+}
+
+.riviera-header-sub {
+    margin: 4px 0 0 0;
+    color: #475569;
+    font-size: 0.92rem;
+}
+
+.riviera-badge {
+    background-color: #EAF4EE;
+    color: #006837;
+    border: 1px solid #B7DEC6;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Pie de página institucional */
+.riviera-footer {
+    text-align: center;
+    color: #64748B;
+    font-size: 0.82rem;
+    margin-top: 32px;
+    padding-top: 14px;
+    border-top: 1px solid #DCE7E0;
+}
